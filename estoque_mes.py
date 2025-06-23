@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 from datetime import datetime
 
 # Configurações iniciais
@@ -128,6 +129,27 @@ df_consolidado.to_excel(writer, sheet_name='Consolidado', index=False)
 # Depois escrever as abas individuais
 for data_str, df in abas_individuais.items():
     df.to_excel(writer, sheet_name=data_str, index=False)
+
+# Ajustar a largura das colunas para todas as abas
+workbook = writer.book
+for sheet_name in workbook.sheetnames:
+    worksheet = workbook[sheet_name]
+    
+    # Ajustar a largura de todas as colunas
+    for column in worksheet.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        
+        # Adicionar um pequeno buffer
+        adjusted_width = (max_length + 2)
+        worksheet.column_dimensions[column_letter].width = adjusted_width
 
 # Salvar o arquivo Excel
 writer.close()
