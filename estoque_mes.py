@@ -14,6 +14,9 @@ writer = pd.ExcelWriter(arquivo_saida, engine='openpyxl')
 # Dicionário para armazenar os dados consolidados
 dados_consolidados = {}
 
+# Dicionário para armazenar os DataFrames de cada aba individual
+abas_individuais = {}
+
 # Lista para armazenar todas as datas encontradas
 datas_encontradas = []
 
@@ -68,8 +71,8 @@ for arquivo in os.listdir(caminho_pasta):
             # Renomear colunas para padrão (remover espaços extras)
             df.columns = df.columns.str.strip()
             
-            # Adicionar aba com a data no nome
-            df.to_excel(writer, sheet_name=data_str, index=False)
+            # Armazenar o DataFrame para escrever depois
+            abas_individuais[data_str] = df
             
             # Processar dados para a planilha consolidada
             for _, row in df.iterrows():
@@ -119,8 +122,12 @@ for produto, dados in dados_consolidados.items():
 
 df_consolidado = pd.DataFrame(linhas_consolidadas)
 
-# Escrever a aba consolidada
+# Escrever primeiro a aba consolidada
 df_consolidado.to_excel(writer, sheet_name='Consolidado', index=False)
+
+# Depois escrever as abas individuais
+for data_str, df in abas_individuais.items():
+    df.to_excel(writer, sheet_name=data_str, index=False)
 
 # Salvar o arquivo Excel
 writer.close()
