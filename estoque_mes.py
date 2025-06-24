@@ -5,7 +5,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from datetime import datetime
 
 # Configurações iniciais
-caminho_pasta = r'C:\Users\Win10\OneDrive\Documentos\Custos médios - Junho 2025'
+caminho_pasta = r'C:\Users\gmass\OneDrive\Documentos\Custos médios - Junho 2025'
 downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
 arquivo_saida = os.path.join(downloads_path, 'Custos_Consolidados.xlsx')
 
