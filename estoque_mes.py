@@ -8,7 +8,13 @@ from datetime import datetime
 # Configurações iniciais
 caminho_pasta = r'C:\Users\gmass\OneDrive\Documentos\Custos médios - Junho 2025'
 downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
-arquivo_saida = os.path.join(downloads_path, 'Custos_Consolidados.xlsx')
+
+# Obter mês e ano do nome da pasta
+nome_pasta = os.path.basename(caminho_pasta)
+mes_ano = nome_pasta.split(' - ')[-1]  # Pega "Junho 2025"
+
+# Criar nome do arquivo com mês e ano em palavras
+arquivo_saida = os.path.join(downloads_path, f'Custos de produtos - {mes_ano}.xlsx')
 
 # Criar um writer para o arquivo Excel de saída
 writer = pd.ExcelWriter(arquivo_saida, engine='openpyxl')
