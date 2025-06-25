@@ -3,6 +3,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.styles import Font, PatternFill
 from datetime import datetime
 
 # Configurações iniciais
@@ -15,9 +16,6 @@ mes_ano = nome_pasta.split(' - ')[-1]  # Pega "Junho 2025"
 
 # Criar nome do arquivo com mês e ano em palavras
 arquivo_saida = os.path.join(downloads_path, f'Custos de produtos - {mes_ano}.xlsx')
-
-# Criar um writer para o arquivo Excel de saída
-writer = pd.ExcelWriter(arquivo_saida, engine='openpyxl')
 
 # Dicionário para armazenar os dados consolidados
 dados_consolidados = {}
@@ -139,6 +137,11 @@ for produto, dados in dados_consolidados.items():
 
 df_consolidado = pd.DataFrame(linhas_consolidadas)
 
+# Garantir que todas as colunas de datas estão presentes
+for data in datas_encontradas:
+    if data not in df_consolidado.columns:
+        df_consolidado[data] = ''
+
 # Criar DataFrame para a aba Base
 if dados_base:
     df_base = pd.concat(dados_base, ignore_index=True)
@@ -148,104 +151,115 @@ if dados_base:
 else:
     df_base = pd.DataFrame()
 
-# Função para adicionar formato de tabela a uma planilha
 def formatar_como_tabela(worksheet, df, nome_tabela):
+    if df.empty:
+        return
+    
+    # Função para converter número de coluna para letra (A, B, ..., Z, AA, AB, etc.)
+    def col_to_letter(col):
+        letter = ''
+        while col > 0:
+            col, remainder = divmod(col - 1, 26)
+            letter = chr(65 + remainder) + letter
+        return letter
+    
     # Determinar as dimensões da tabela
-    max_row, max_col = df.shape
-    ref = f"A1:{chr(65 + max_col - 1)}{max_row + 1}"
+    max_row = len(df)
+    max_col = len(df.columns)
     
-    # Criar a tabela
-    tab = Table(displayName=nome_tabela, ref=ref)
+    # Criar a referência no formato correto (ex: "A1:C4")
+    start_cell = 'A1'
+    end_col = col_to_letter(max_col)
+    end_cell = f"{end_col}{max_row + 1}"  # +1 porque a linha 1 é o cabeçalho
+    ref = f"{start_cell}:{end_cell}"
     
-    # Definir um estilo PERSONALIZADO
-    style = TableStyleInfo(
-        name="TableStyleMedium9",  # Base (poderia ser qualquer um)
-        showFirstColumn=False,
-        showLastColumn=False,
-        showRowStripes=True,
-        showColumnStripes=False
-    )
-    tab.tableStyleInfo = style
+    try:
+        # Criar a tabela
+        tab = Table(displayName=nome_tabela, ref=ref)
+        
+        # Definir um estilo
+        style = TableStyleInfo(
+            name="TableStyleMedium9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False
+        )
+        tab.tableStyleInfo = style
+        
+        # Adicionar a tabela à planilha
+        worksheet.add_table(tab)
+        
+        # Formatar cabeçalho
+        header_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # Formatar linhas intercaladas
+        light_gray = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+        white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+        
+        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+            for cell in row:
+                if cell.row % 2 == 0:
+                    cell.fill = light_gray
+                else:
+                    cell.fill = white
     
-    # Adicionar a tabela à planilha
-    worksheet.add_table(tab)
-    
-    # --- FORMATAR MANUALMENTE O CABEÇALHO ---
-    # Acessar a primeira linha (cabeçalho)
-    header_row = worksheet[1]
-    
-    # Definir estilo para o cabeçalho
-    from openpyxl.styles import Font, PatternFill
-    header_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")  # Preto
-    header_font = Font(color="FFFFFF", bold=True)  # Texto branco
-    
-    for cell in header_row:
-        cell.fill = header_fill
-        cell.font = header_font
-    
-    # --- FORMATAR LINHAS INTERCALADAS ---
-    # Cores claras para as linhas (ex.: cinza claro e branco)
-    from openpyxl.styles import colors
-    light_gray = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-    white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-    
-    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
-        for cell in row:
-            if cell.row % 2 == 0:  # Linhas pares
-                cell.fill = light_gray
-            else:  # Linhas ímpares
-                cell.fill = white
+    except Exception as e:
+        print(f"Erro ao formatar tabela {nome_tabela}: {str(e)}")
+
 # Escrever as abas no arquivo Excel
-# Primeiro a aba consolidada
-df_consolidado.to_excel(writer, sheet_name='Consolidado', index=False)
-
-# Depois a aba Base
-if not df_base.empty:
-    df_base.to_excel(writer, sheet_name='Base', index=False)
-
-# Por último as abas individuais
-for data_str, df in abas_individuais.items():
-    df.to_excel(writer, sheet_name=data_str, index=False)
-
-# Acessar o workbook para formatar as tabelas
-workbook = writer.book
-
-# Formatando cada aba como tabela
-for sheet_name in workbook.sheetnames:
-    worksheet = workbook[sheet_name]
+with pd.ExcelWriter(arquivo_saida, engine='openpyxl') as writer:
+    # Primeiro a aba consolidada
+    df_consolidado.to_excel(writer, sheet_name='Consolidado', index=False)
     
-    # Determinar o DataFrame correspondente
-    if sheet_name == 'Consolidado':
-        df = df_consolidado
-    elif sheet_name == 'Base':
-        df = df_base
-    else:
-        df = abas_individuais.get(sheet_name, pd.DataFrame())
+    # Depois a aba Base
+    if not df_base.empty:
+        df_base.to_excel(writer, sheet_name='Base', index=False)
     
-    if not df.empty:
-        # Nome da tabela (remover caracteres inválidos)
-        table_name = f"Table_{sheet_name}".replace(" ", "_").replace("-", "_")
-        
-        # Chamar função para formatar como tabela
-        formatar_como_tabela(worksheet, df, table_name)
+    # Por último as abas individuais
+    for data_str, df in abas_individuais.items():
+        df.to_excel(writer, sheet_name=data_str, index=False)
     
-    # Ajustar a largura das colunas
-    for column in worksheet.columns:
-        max_length = 0
-        column_letter = column[0].column_letter
+    # Acessar o workbook para formatar as tabelas
+    workbook = writer.book
+    
+    # Formatando cada aba como tabela
+    for sheet_name in workbook.sheetnames:
+        worksheet = workbook[sheet_name]
         
-        for cell in column:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
+        # Determinar o DataFrame correspondente
+        if sheet_name == 'Consolidado':
+            df = df_consolidado
+        elif sheet_name == 'Base':
+            df = df_base
+        else:
+            df = abas_individuais.get(sheet_name, pd.DataFrame())
         
-        # Adicionar um pequeno buffer
-        adjusted_width = (max_length + 2)
-        worksheet.column_dimensions[column_letter].width = adjusted_width
-
-# Salvar o arquivo Excel
-writer.close()
+        if not df.empty:
+            # Nome da tabela (remover caracteres inválidos)
+            table_name = f"Table_{sheet_name}".replace(" ", "_").replace("-", "_")
+            
+            # Chamar função para formatar como tabela
+            formatar_como_tabela(worksheet, df, table_name)
+        
+        # Ajustar a largura das colunas
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            
+            adjusted_width = (max_length + 2)
+            worksheet.column_dimensions[column_letter].width = adjusted_width
 
 print(f"Processo concluído. Arquivo gerado em: {arquivo_saida}")
