@@ -113,6 +113,92 @@ for arquivo in os.listdir(caminho_pasta):
 # Ordenar as datas
 datas_encontradas.sort(key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
 
+# Adicione esta função auxiliar no início do seu código
+def formatar_numero(valor, casas_decimais=2, is_integer=False):
+    # Remover espaços em branco no início e fim
+    if isinstance(valor, str):
+        valor = valor.strip()
+    
+    if pd.isna(valor) or valor in ['', 'add by sistem', '*****,**']:
+        return 'add by sistem'
+    
+    try:
+        # Tentar converter para float primeiro (para lidar com strings que podem ter vírgulas)
+        num = float(str(valor).replace('.', '').replace(',', '.')) if isinstance(valor, str) else float(valor)
+        
+        if is_integer:
+            return f"{int(num):,}".replace(",", ".")
+        else:
+            # Formatar com casas decimais fixas e separadores corretos
+            formatted = f"{num:,.{casas_decimais}f}"
+            # Substituir separadores (garantindo . para milhares e , para decimais)
+            if casas_decimais > 0:
+                return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+            return formatted.replace(",", ".")
+    except (ValueError, TypeError):
+        return str(valor).strip() if isinstance(valor, str) else str(valor)
+    
+# Função para verificar se todos os valores de custo de um produto são inválidos
+def todos_valores_invalidos(valores):
+    for data, valor in valores.items():
+        if valor not in [0, '', None, '*****,**'] and pd.notna(valor):
+            return False
+    return True
+
+# Função para verificar se existem valores válidos em qualquer data
+def existe_valor_valido(valores):
+    for valor in valores:
+        try:
+            # Verifica se é um número válido e diferente de zero
+            if float(valor) > 0:
+                return True
+        except (ValueError, TypeError):
+            # Se não for conversível para float, verifica se é string válida
+            if str(valor).strip() not in ['', '0', '0,00', '*****,**', 'add by sistem', 'None']:
+                return True
+    return False
+produtos_validos = set()
+for produto, dados in dados_consolidados.items():
+    # Converter os valores do dicionário para uma lista
+    valores_custo = list(dados['CUSTOS'].values())
+    if existe_valor_valido(valores_custo):
+        produtos_validos.add(produto)
+
+
+# Remover produtos onde todos os valores de custo são inválidos
+produtos_para_remover = [produto for produto, dados in dados_consolidados.items() 
+                        if not existe_valor_valido(dados['CUSTOS'])]
+for produto in produtos_para_remover:
+    del dados_consolidados[produto]
+
+dados_consolidados = {k: v for k, v in dados_consolidados.items() if k in produtos_validos}
+
+# Remover produtos onde todos os valores de custo são inválidos
+produtos_para_remover = [produto for produto, dados in dados_consolidados.items() 
+                        if todos_valores_invalidos(dados['CUSTOS'])]
+for produto in produtos_para_remover:
+    del dados_consolidados[produto]
+
+# Função para preencher valores faltantes ou inválidos
+def preencher_custo(valores, data_atual):
+    datas_ordenadas = sorted(valores.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
+    idx = datas_ordenadas.index(data_atual)
+    
+    # Primeiro tenta encontrar valor anterior válido
+    for i in range(idx-1, -1, -1):
+        valor = valores[datas_ordenadas[i]]
+        if valor not in [0, '', None, '*****,**'] and pd.notna(valor):
+            return valor
+    
+    # Se não encontrar anterior, tenta posterior
+    for i in range(idx+1, len(datas_ordenadas)):
+        valor = valores[datas_ordenadas[i]]
+        if valor not in [0, '', None, '*****,**'] and pd.notna(valor):
+            return valor
+    
+    # Se não encontrar nenhum valor válido, retorna o original
+    return valores[data_atual]
+
 # Criar DataFrame consolidado
 linhas_consolidadas = []
 for produto, dados in dados_consolidados.items():
@@ -142,12 +228,67 @@ for data in datas_encontradas:
     if data not in df_consolidado.columns:
         df_consolidado[data] = ''
 
-# Criar DataFrame para a aba Base
+# Criar DataFrame para a aba Base com todos os dias para cada produto
 if dados_base:
-    df_base = pd.concat(dados_base, ignore_index=True)
+    # Criar lista de produtos válidos
+    produtos_validos_lista = list(produtos_validos)
+    
+    # Primeiro criar o df_base_completo como antes
+    df_produtos_info = pd.concat(dados_base, ignore_index=True)[['PRODUTO', 'DESCRICAO', 'GRUPO']].drop_duplicates('PRODUTO')
+    df_produtos_info = df_produtos_info[df_produtos_info['PRODUTO'].isin(produtos_validos)]
+    
+    df_base_completo = pd.DataFrame([(produto, data) for produto in df_produtos_info['PRODUTO'] for data in datas_encontradas],
+                                   columns=['PRODUTO', 'DATA'])
+    
+    df_base_completo = pd.merge(df_base_completo, df_produtos_info, on='PRODUTO', how='left')
+    df_base_original = pd.concat(dados_base, ignore_index=True)
+    
+    # Agora fazer o merge já filtrado
+    df_base = pd.merge(df_base_completo, df_base_original, 
+                      on=['PRODUTO', 'DATA', 'DESCRICAO', 'GRUPO'], 
+                      how='left',
+                      suffixes=('', '_original'))
+    
+    # Remover colunas duplicadas do merge
+    for col in df_base.columns:
+        if col.endswith('_original'):
+            df_base.drop(col, axis=1, inplace=True)
+    
+    # Preencher valores faltantes para PCS, KGS e TOTAL
+    df_base['PCS'] = df_base['PCS'].fillna('add by sistem')
+    df_base['KGS'] = df_base['KGS'].fillna('add by sistem')
+    df_base['TOTAL'] = df_base['TOTAL'].fillna('add by sistem')
+    df_base['GRUPO'] = df_base['GRUPO'].fillna('adicionado pelo programa')
+    
+    # Para cada produto, criar um dicionário com seus custos por data
+    custos_por_produto = {}
+    for produto in df_produtos_info['PRODUTO']:
+        custos_por_produto[produto] = {}
+        for data in datas_encontradas:
+            # Encontrar o valor original do custo para esta data e produto
+            valor = df_base_original.loc[(df_base_original['PRODUTO'] == produto) & 
+                                       (df_base_original['DATA'] == data), 'CUSTO'].values
+            if len(valor) > 0:
+                custos_por_produto[produto][data] = valor[0]
+            else:
+                custos_por_produto[produto][data] = None
+    
+    # Agora aplicar a lógica de preenchimento para os custos
+    for idx, row in df_base.iterrows():
+        produto = row['PRODUTO']
+        data = row['DATA']
+        
+        # Se o custo estiver faltando ou for inválido
+        if pd.isna(row['CUSTO']) or row['CUSTO'] in [0, '', '*****,**']:
+            # Preencher com o valor mais recente válido
+            df_base.at[idx, 'CUSTO'] = preencher_custo(custos_por_produto[produto], data)
+    
     # Reordenar colunas para deixar DATA como primeira coluna
     colunas = ['DATA'] + [col for col in df_base.columns if col != 'DATA']
     df_base = df_base[colunas]
+    
+    # Ordenar por produto e depois por data
+    df_base = df_base.sort_values(['PRODUTO', 'DATA'])
 else:
     df_base = pd.DataFrame()
 
@@ -211,6 +352,17 @@ def formatar_como_tabela(worksheet, df, nome_tabela):
     
     except Exception as e:
         print(f"Erro ao formatar tabela {nome_tabela}: {str(e)}")
+
+
+if not df_base.empty:
+    # Aplicar formatação padronizada
+    df_base['PCS'] = df_base['PCS'].apply(lambda x: formatar_numero(x, is_integer=True))
+    df_base['KGS'] = df_base['KGS'].apply(lambda x: formatar_numero(x, casas_decimais=3))
+    df_base['CUSTO'] = df_base['CUSTO'].apply(lambda x: formatar_numero(x, casas_decimais=2))
+    df_base['TOTAL'] = df_base['TOTAL'].apply(lambda x: formatar_numero(x, casas_decimais=2))
+    
+    # Ordenar por produto e depois por data
+    df_base = df_base.sort_values(['PRODUTO', 'DATA'])
 
 # Escrever as abas no arquivo Excel
 with pd.ExcelWriter(arquivo_saida, engine='openpyxl') as writer:
