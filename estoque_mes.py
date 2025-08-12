@@ -12,7 +12,7 @@ downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
 
 # Obter mês e ano do nome da pasta
 nome_pasta = os.path.basename(caminho_pasta)
-mes_ano = nome_pasta.split(' - ')[-1]  # Pega "Junho 2025"
+mes_ano = nome_pasta.split(' - ')[-1] 
 
 # Criar nome do arquivo com mês e ano em palavras
 arquivo_saida = os.path.join(downloads_path, f'Custos de produtos - {mes_ano}.xlsx')
@@ -28,6 +28,28 @@ dados_base = []
 
 # Lista para armazenar todas as datas encontradas
 datas_encontradas = []
+
+# Dicionário de códigos de produção
+codigos_producao = {
+    # Big bacon
+    '700': 3.25, 
+    # Paleta
+    '1428': 2.6, '845': 3.85, '809': 3.1, '1452': 3.35, 
+    # Costela
+    '1446': 3.35, '755': 3.1, '848': 3.85, '1433': 2.6, '1095': 3.1,
+    # Lingua
+    '1448': 3.35, '817': 3.1, '849': 3.85, '1430': 2.6, 
+    # Lombo
+    '846': 3.85, '878': 3.1, '1432': 2.6, '1451': 3.35, 
+    # Orelha
+    '1426': 2.6, '1447': 3.35, '850': 3.85, '746': 3.1,
+    # Pé
+    '1427': 2.6, '836': 3.1, '852': 3.85, '1450': 3.35, 
+    # Ponta
+    '1425': 2.6, '750': 3.85, 
+    # Rabo
+    '851': 3.85, '1449': 3.35, '1429': 2.6, '748': 3.1
+}
 
 # Processar cada arquivo na pasta
 for arquivo in os.listdir(caminho_pasta):
@@ -113,7 +135,7 @@ for arquivo in os.listdir(caminho_pasta):
 # Ordenar as datas
 datas_encontradas.sort(key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
 
-# Adicione esta função auxiliar no início do seu código
+# Função auxiliar para formatar números
 def formatar_numero(valor, casas_decimais=2, is_integer=False):
     # Remover espaços em branco no início e fim
     if isinstance(valor, str):
@@ -157,13 +179,13 @@ def existe_valor_valido(valores):
             if str(valor).strip() not in ['', '0', '0,00', '*****,**', 'add by sistem', 'None']:
                 return True
     return False
+
 produtos_validos = set()
 for produto, dados in dados_consolidados.items():
     # Converter os valores do dicionário para uma lista
     valores_custo = list(dados['CUSTOS'].values())
     if existe_valor_valido(valores_custo):
         produtos_validos.add(produto)
-
 
 # Remover produtos onde todos os valores de custo são inválidos
 produtos_para_remover = [produto for produto, dados in dados_consolidados.items() 
@@ -260,6 +282,11 @@ if dados_base:
     df_base['TOTAL'] = df_base['TOTAL'].fillna('add by sistem')
     df_base['GRUPO'] = df_base['GRUPO'].fillna('adicionado pelo programa')
     
+    # Adicionar coluna PRODUÇÃO baseada nos códigos
+    df_base['PRODUÇÃO'] = df_base['PRODUTO'].apply(
+        lambda x: codigos_producao.get(str(x).strip(), 0)
+    )
+    
     # Para cada produto, criar um dicionário com seus custos por data
     custos_por_produto = {}
     for produto in df_produtos_info['PRODUTO']:
@@ -353,13 +380,13 @@ def formatar_como_tabela(worksheet, df, nome_tabela):
     except Exception as e:
         print(f"Erro ao formatar tabela {nome_tabela}: {str(e)}")
 
-
 if not df_base.empty:
     # Aplicar formatação padronizada
     df_base['PCS'] = df_base['PCS'].apply(lambda x: formatar_numero(x, is_integer=True))
     df_base['KGS'] = df_base['KGS'].apply(lambda x: formatar_numero(x, casas_decimais=3))
     df_base['CUSTO'] = df_base['CUSTO'].apply(lambda x: formatar_numero(x, casas_decimais=2))
     df_base['TOTAL'] = df_base['TOTAL'].apply(lambda x: formatar_numero(x, casas_decimais=2))
+    df_base['PRODUÇÃO'] = df_base['PRODUÇÃO'].apply(lambda x: formatar_numero(x, casas_decimais=2))
     
     # Ordenar por produto e depois por data
     df_base = df_base.sort_values(['PRODUTO', 'DATA'])
