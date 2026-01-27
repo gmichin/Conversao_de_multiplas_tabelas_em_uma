@@ -7,7 +7,7 @@ from openpyxl.styles import Font, PatternFill
 from datetime import datetime
 
 # Configurações iniciais
-caminho_pasta = r'C:\Users\win11\OneDrive\Documentos\Custos Médios\2025\Outubro'
+caminho_pasta = r'C:\Users\win11\OneDrive\Documentos\Custos Médios\2026\Janeiro'
 downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
 
 # Obter mês e ano do nome da pasta
@@ -125,7 +125,7 @@ fretes = {
     "1916": 0   , "1924": 0.65, "1934": 0.65, "1958": 0   , "1959": 0.65, "1969": 0   ,
     "1970": 0   , "1971": 0.65, "1972": 0   , "1973": 0   , "1974": 0   , "8005": 0   ,
     "1230": 0.65, "1812": 0.65, "1958": 0.65, "1972": 0.65, "1973": 0.65, "1974": 0.65,
-    "1975": 0.65, "1976": 0.65, "8005": 0.65, "1800": 0.65, "1978": 0.65, 
+    "1975": 0.65, "1976": 0.65, "8005": 0.65, "1800": 0.65, "1978": 0.65, "1477": 0.65
 }
 
 # Processar cada arquivo na pasta
