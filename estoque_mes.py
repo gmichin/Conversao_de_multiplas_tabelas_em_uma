@@ -7,7 +7,7 @@ from openpyxl.styles import Font, PatternFill
 from datetime import datetime
 
 # Configurações iniciais
-caminho_pasta = r'C:\Users\DELL\VOG\AD - Documentos\Custos Médios\2026\Junho'
+caminho_pasta = r"C:\Users\DELL\VOG\AD - Documentos\Custos Médios\2026\Julho"
 downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
 
 # Obter mês e ano do nome da pasta
